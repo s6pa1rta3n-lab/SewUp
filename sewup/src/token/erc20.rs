@@ -18,7 +18,7 @@ use super::helpers::{
 #[cfg(target_arch = "wasm32")]
 use crate::utils::{caller, ewasm_return_str};
 #[cfg(target_arch = "wasm32")]
-use bitcoin::util::uint::Uint256;
+use super::helpers::Uint256;
 #[cfg(target_arch = "wasm32")]
 use ewasm_api::log3;
 #[cfg(target_arch = "wasm32")]

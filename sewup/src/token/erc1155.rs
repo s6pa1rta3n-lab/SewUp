@@ -15,7 +15,7 @@ use super::helpers::{
 use crate::utils::{caller, ewasm_return_vec};
 
 #[cfg(target_arch = "wasm32")]
-use bitcoin::util::uint::Uint256;
+use super::helpers::Uint256;
 
 #[cfg(target_arch = "wasm32")]
 use crate::types::Address;

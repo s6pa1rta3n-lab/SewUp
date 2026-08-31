@@ -12,6 +12,24 @@ use ewasm_api::types::{StorageKey, StorageValue};
 #[cfg(not(target_arch = "wasm32"))]
 pub struct StorageValue {}
 
+uint::construct_uint! {
+    pub struct Uint256(4);
+}
+
+impl Uint256 {
+    pub fn from_be_bytes(bytes: [u8; 32]) -> Self {
+        Uint256::from_big_endian(&bytes)
+    }
+    pub fn to_be_bytes(&self) -> [u8; 32] {
+        let mut buf = [0u8; 32];
+        self.to_big_endian(&mut buf);
+        buf
+    }
+    pub fn from_u64(val: u64) -> Result<Self, ()> {
+        Ok(Uint256::from(val))
+    }
+}
+
 pub fn calculate_approval_hash(sender: &[u8; 20], spender: &[u8; 20]) -> Vec<u8> {
     let mut allowance: Vec<u8> = "approval".as_bytes().into();
     allowance.extend_from_slice(sender);

@@ -25,7 +25,7 @@ use super::helpers::{
 use crate::utils::{caller, ewasm_return_bool};
 
 #[cfg(target_arch = "wasm32")]
-use bitcoin::util::uint::Uint256;
+use super::helpers::Uint256;
 #[cfg(target_arch = "wasm32")]
 use hex::decode;
 
@@ -116,7 +116,7 @@ pub fn transfer_from(contract: &Contract) {
     let to = copy_into_address(&contract.input_data[48..68]);
     let token_id = contract.input_data[68..100].try_into().unwrap();
 
-    if sender != get_token_approval(&token_id) && !get_approval(&owner, &sender) {
+    if sender != owner && sender != get_token_approval(&token_id) && !get_approval(&owner, &sender) {
         ewasm_api::revert();
     }
 
@@ -220,6 +220,24 @@ pub fn token_metadata(_contract: &Contract) {
     // https://github.com/second-state/SewUp/issues/161
 }
 
+pub const ON_ERC721_RECEIVED_MAGIC_VALUE: [u8; 4] = [0x15, 0x0b, 0x7a, 0x02];
+
+/// Implement ERC721TokenReceiver onERC721Received(address,address,uint256,bytes)
+#[ewasm_lib_fn("150b7a02",
+    inputs=[
+        { "name": "_operator", "type": "address" },
+        { "name": "_from", "type": "address" },
+        { "name": "_tokenId", "type": "uint256" },
+        { "name": "_data", "type": "bytes" }
+    ],
+    name=onERC721Received,
+    outputs=[{ "name": "", "type": "bytes4" }],
+    stateMutability=nonpayable
+)]
+pub fn on_erc721_received(_contract: &Contract) {
+    ewasm_api::finish_data(&ON_ERC721_RECEIVED_MAGIC_VALUE);
+}
+
 /// Implement ERC-721 safeTransferFrom(address,address,uint256,bytes)
 /// @dev Throws unless `msg.sender` is the current owner, an authorized
 /// operator, or the approved address for this NFT. Throws if `_from` is
@@ -228,24 +246,132 @@ pub fn token_metadata(_contract: &Contract) {
 /// checks if `_to` is a smart contract (code size > 0). If so, it calls
 /// `onERC721Received` on `_to` and throws if the return value is not
 /// `bytes4(keccak256("onERC721Received(address,address,uint256,bytes)"))`.
-#[ewasm_lib_fn("b88d4fde")]
-pub fn safe_transfer_from_with_data(_contract: &Contract) {
-    // TODO
-    // https://github.com/second-state/SewUp/issues/160
+#[ewasm_lib_fn("b88d4fde",
+    inputs=[
+        { "name": "_from", "type": "address" },
+        { "name": "_to", "type": "address" },
+        { "name": "_tokenId", "type": "uint256" },
+        { "name": "_data", "type": "bytes" }
+    ],
+    name=safeTransferFrom,
+    stateMutability=nonpayable
+)]
+pub fn safe_transfer_from_with_data(contract: &Contract) {
+    let sender = caller();
+    let owner = copy_into_address(&contract.input_data[16..36]);
+    let to = copy_into_address(&contract.input_data[48..68]);
+    let token_id: [u8; 32] = contract.input_data[68..100]
+        .try_into()
+        .expect("token id should be byte32");
+
+    let zero_addr = Address::default();
+    if to == zero_addr {
+        ewasm_api::revert();
+    }
+
+    let actual_owner = get_token_owner(&token_id);
+    if actual_owner != owner {
+        ewasm_api::revert();
+    }
+
+    if sender != owner && sender != get_token_approval(&token_id) && !get_approval(&owner, &sender) {
+        ewasm_api::revert();
+    }
+
+    do_transfer(owner.clone().into(), to.clone(), token_id);
+
+    if ewasm_api::external_code_size(&to.inner) > 0 {
+        let mut call_data = Vec::with_capacity(164 + contract.input_data.len().saturating_sub(100));
+        call_data.extend_from_slice(&ON_ERC721_RECEIVED_MAGIC_VALUE);
+        call_data.extend_from_slice(&Raw::from(sender).to_bytes32());
+        call_data.extend_from_slice(&Raw::from(owner).to_bytes32());
+        call_data.extend_from_slice(&token_id);
+        if contract.input_data.len() > 100 {
+            call_data.extend_from_slice(&contract.input_data[100..]);
+        } else {
+            call_data.extend_from_slice(&Raw::from(128u32).to_bytes32());
+            call_data.extend_from_slice(&Raw::from(0u32).to_bytes32());
+        }
+
+        match ewasm_api::call_mutable(
+            ewasm_api::gas_left(),
+            &to.inner,
+            &ewasm_api::types::EtherValue::default(),
+            &call_data,
+        ) {
+            ewasm_api::CallResult::Successful => {
+                let ret_data = ewasm_api::returndata_acquire();
+                if ret_data.len() < 4 || ret_data[0..4] != ON_ERC721_RECEIVED_MAGIC_VALUE {
+                    ewasm_api::revert();
+                }
+            }
+            _ => {
+                ewasm_api::revert();
+            }
+        }
+    }
 }
 
 /// Implement ERC-721 safeTransferFrom(address,address,uint256)
 #[ewasm_lib_fn("42842e0e",
-  inputs=[
-    { "name": "_from", "type": "address" },
-    { "name": "_to", "type": "address" },
-    { "name": "_tokenId", "type": "uint256" }
-  ],
-  stateMutability=nonpayable
+    inputs=[
+        { "name": "_from", "type": "address" },
+        { "name": "_to", "type": "address" },
+        { "name": "_tokenId", "type": "uint256" }
+    ],
+    name=safeTransferFrom,
+    stateMutability=nonpayable
 )]
-pub fn safe_transfer_from(_contract: &Contract) {
-    // TODO
-    // https://github.com/second-state/SewUp/issues/160
+pub fn safe_transfer_from(contract: &Contract) {
+    let sender = caller();
+    let owner = copy_into_address(&contract.input_data[16..36]);
+    let to = copy_into_address(&contract.input_data[48..68]);
+    let token_id: [u8; 32] = contract.input_data[68..100]
+        .try_into()
+        .expect("token id should be byte32");
+
+    let zero_addr = Address::default();
+    if to == zero_addr {
+        ewasm_api::revert();
+    }
+
+    let actual_owner = get_token_owner(&token_id);
+    if actual_owner != owner {
+        ewasm_api::revert();
+    }
+
+    if sender != owner && sender != get_token_approval(&token_id) && !get_approval(&owner, &sender) {
+        ewasm_api::revert();
+    }
+
+    do_transfer(owner.clone().into(), to.clone(), token_id);
+
+    if ewasm_api::external_code_size(&to.inner) > 0 {
+        let mut call_data = Vec::with_capacity(164);
+        call_data.extend_from_slice(&ON_ERC721_RECEIVED_MAGIC_VALUE);
+        call_data.extend_from_slice(&Raw::from(sender).to_bytes32());
+        call_data.extend_from_slice(&Raw::from(owner).to_bytes32());
+        call_data.extend_from_slice(&token_id);
+        call_data.extend_from_slice(&Raw::from(128u32).to_bytes32());
+        call_data.extend_from_slice(&Raw::from(0u32).to_bytes32());
+
+        match ewasm_api::call_mutable(
+            ewasm_api::gas_left(),
+            &to.inner,
+            &ewasm_api::types::EtherValue::default(),
+            &call_data,
+        ) {
+            ewasm_api::CallResult::Successful => {
+                let ret_data = ewasm_api::returndata_acquire();
+                if ret_data.len() < 4 || ret_data[0..4] != ON_ERC721_RECEIVED_MAGIC_VALUE {
+                    ewasm_api::revert();
+                }
+            }
+            _ => {
+                ewasm_api::revert();
+            }
+        }
+    }
 }
 
 #[cfg(target_arch = "wasm32")]

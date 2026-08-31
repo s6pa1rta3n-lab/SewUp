@@ -1,4 +1,4 @@
-use sewup_derive::{ewasm_constructor, ewasm_fn_sig, ewasm_main, ewasm_test};
+use sewup_derive::{ewasm_constructor, ewasm_main, ewasm_test};
 
 #[ewasm_constructor]
 fn constructor() {
@@ -27,6 +27,15 @@ fn main() -> anyhow::Result<()> {
         }
         sewup::token::erc721::IS_APPROVED_FOR_ALL_SIG => {
             sewup::token::erc721::is_approved_for_all(&contract)
+        }
+        sewup::token::erc721::SAFE_TRANSFER_FROM_SIG => {
+            sewup::token::erc721::safe_transfer_from(&contract)
+        }
+        sewup::token::erc721::SAFE_TRANSFER_FROM_WITH_DATA_SIG => {
+            sewup::token::erc721::safe_transfer_from_with_data(&contract)
+        }
+        sewup::token::erc721::ON_ERC721_RECEIVED_SIG => {
+            sewup::token::erc721::on_erc721_received(&contract)
         }
         _ => (),
     };

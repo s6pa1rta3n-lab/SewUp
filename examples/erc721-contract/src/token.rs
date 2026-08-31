@@ -28,6 +28,12 @@ fn main() -> anyhow::Result<()> {
         sewup::token::erc721::IS_APPROVED_FOR_ALL_SIG => {
             sewup::token::erc721::is_approved_for_all(&contract)
         }
+        sewup::token::erc721::SAFE_TRANSFER_FROM_SIG => {
+            sewup::token::erc721::safe_transfer_from(&contract)
+        }
+        sewup::token::erc721::SAFE_TRANSFER_FROM_WITH_DATA_SIG => {
+            sewup::token::erc721::safe_transfer_from_with_data(&contract)
+        }
         _ => (),
     };
     Ok(())
@@ -37,7 +43,10 @@ fn main() -> anyhow::Result<()> {
 mod tests {
     use super::*;
     use hex_literal::hex;
-    use sewup::erc721::{BALANCE_OF_SIG, OWNER_OF_SIG, TRANSFER_SIG};
+    use sewup::erc721::{
+        BALANCE_OF_SIG, OWNER_OF_SIG, SAFE_TRANSFER_FROM_SIG, SAFE_TRANSFER_FROM_WITH_DATA_SIG,
+        TRANSFER_SIG,
+    };
     use sewup_derive::ewasm_assert_eq;
 
     #[ewasm_test]
@@ -86,6 +95,33 @@ mod tests {
         ewasm_assert_eq!(
             owner_of(token1),
             hex!("0000000000000000000000000000000000000000000000000000000000000001").to_vec()
+        );
+    }
+
+    #[ewasm_test]
+    fn test_safe_transfer_from_with_data() {
+        let from = hex!("0000000000000000000000008663DBF0cC68AaF37fC8BA262F2df4c666a41993");
+        let to = hex!("0000000000000000000000000000000000000000000000000000000000000002");
+        let token2 = hex!("0000000000000000000000000000000000000000000000000000000000000002");
+        let offset = hex!("0000000000000000000000000000000000000000000000000000000000000080");
+        let data_len = hex!("0000000000000000000000000000000000000000000000000000000000000004");
+        let data = hex!("1234567800000000000000000000000000000000000000000000000000000000");
+
+        let mut input_data = vec![0u8; 4];
+        input_data.extend_from_slice(&from);
+        input_data.extend_from_slice(&to);
+        input_data.extend_from_slice(&token2);
+        input_data.extend_from_slice(&offset);
+        input_data.extend_from_slice(&data_len);
+        input_data.extend_from_slice(&data);
+
+        ewasm_assert_eq!(
+            safe_transfer_from_with_data(input_data) by "8663DBF0cC68AaF37fC8BA262F2df4c666a41993",
+            vec![]
+        );
+        ewasm_assert_eq!(
+            owner_of(token2),
+            hex!("0000000000000000000000000000000000000000000000000000000000000002").to_vec()
         );
     }
 }

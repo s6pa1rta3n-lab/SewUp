@@ -228,10 +228,40 @@ pub fn token_metadata(_contract: &Contract) {
 /// checks if `_to` is a smart contract (code size > 0). If so, it calls
 /// `onERC721Received` on `_to` and throws if the return value is not
 /// `bytes4(keccak256("onERC721Received(address,address,uint256,bytes)"))`.
-#[ewasm_lib_fn("b88d4fde")]
-pub fn safe_transfer_from_with_data(_contract: &Contract) {
-    // TODO
-    // https://github.com/second-state/SewUp/issues/160
+#[ewasm_lib_fn("b88d4fde",
+  inputs=[
+    { "name": "_from", "type": "address" },
+    { "name": "_to", "type": "address" },
+    { "name": "_tokenId", "type": "uint256" },
+    { "name": "_data", "type": "bytes" }
+  ],
+  stateMutability=nonpayable
+)]
+pub fn safe_transfer_from_with_data(contract: &Contract) {
+    let sender = caller();
+    let from = copy_into_address(&contract.input_data[16..36]);
+    let to = copy_into_address(&contract.input_data[48..68]);
+    let token_id: [u8; 32] = contract.input_data[68..100]
+        .try_into()
+        .expect("token id should be byte32");
+
+    if to == Address::default() {
+        ewasm_api::revert();
+    }
+
+    let owner = get_token_owner(&token_id);
+    if owner != from {
+        ewasm_api::revert();
+    }
+
+    if sender != owner
+        && sender != get_token_approval(&token_id)
+        && !get_approval(&from, &sender)
+    {
+        ewasm_api::revert();
+    }
+
+    do_transfer(from.into(), to, token_id);
 }
 
 /// Implement ERC-721 safeTransferFrom(address,address,uint256)
@@ -243,9 +273,31 @@ pub fn safe_transfer_from_with_data(_contract: &Contract) {
   ],
   stateMutability=nonpayable
 )]
-pub fn safe_transfer_from(_contract: &Contract) {
-    // TODO
-    // https://github.com/second-state/SewUp/issues/160
+pub fn safe_transfer_from(contract: &Contract) {
+    let sender = caller();
+    let from = copy_into_address(&contract.input_data[16..36]);
+    let to = copy_into_address(&contract.input_data[48..68]);
+    let token_id: [u8; 32] = contract.input_data[68..100]
+        .try_into()
+        .expect("token id should be byte32");
+
+    if to == Address::default() {
+        ewasm_api::revert();
+    }
+
+    let owner = get_token_owner(&token_id);
+    if owner != from {
+        ewasm_api::revert();
+    }
+
+    if sender != owner
+        && sender != get_token_approval(&token_id)
+        && !get_approval(&from, &sender)
+    {
+        ewasm_api::revert();
+    }
+
+    do_transfer(from.into(), to, token_id);
 }
 
 #[cfg(target_arch = "wasm32")]

@@ -163,3 +163,64 @@ fn test_contract_mode_option_parser() {
         Err("can not set default message for rusty mode")
     );
 }
+
+#[test]
+fn test_get_plural_form() {
+    assert_eq!(get_plural_form("Person"), "people");
+    assert_eq!(get_plural_form("SalesPerson"), "salespeople");
+    assert_eq!(get_plural_form("Child"), "children");
+    assert_eq!(get_plural_form("Quiz"), "quizzes");
+    assert_eq!(get_plural_form("Datum"), "data");
+    assert_eq!(get_plural_form("Post"), "posts");
+    assert_eq!(get_plural_form("Location"), "locations");
+    assert_eq!(get_plural_form("Category"), "categories");
+    assert_eq!(get_plural_form("Box"), "boxes");
+    assert_eq!(get_plural_form("Bus"), "buses");
+    assert_eq!(get_plural_form("Match"), "matches");
+    assert_eq!(get_plural_form("Wish"), "wishes");
+    assert_eq!(get_plural_form("Boy"), "boys");
+}
+
+#[test]
+fn test_parse_relation_attr() {
+    assert_eq!(
+        parse_relation_attr("(Person)"),
+        ("Person".to_string(), None)
+    );
+    assert_eq!(
+        parse_relation_attr("(Person, author)"),
+        ("Person".to_string(), Some("author".to_string()))
+    );
+    assert_eq!(
+        parse_relation_attr("(Person, name = \"author\")"),
+        ("Person".to_string(), Some("author".to_string()))
+    );
+    assert_eq!(
+        parse_relation_attr("(Person, plural = \"people\")"),
+        ("Person".to_string(), Some("people".to_string()))
+    );
+    assert_eq!(
+        parse_relation_attr("(Post, posts)"),
+        ("Post".to_string(), Some("posts".to_string()))
+    );
+    assert_eq!(
+        parse_relation_attr("(Location, home)"),
+        ("Location".to_string(), Some("home".to_string()))
+    );
+}
+
+#[test]
+fn test_parse_plural_attr() {
+    assert_eq!(parse_plural_attr("(people)"), Some("people".to_string()));
+    assert_eq!(parse_plural_attr("(\"people\")"), Some("people".to_string()));
+    assert_eq!(parse_plural_attr("= \"people\""), Some("people".to_string()));
+    assert_eq!(
+        parse_plural_attr("(plural = \"people\")"),
+        Some("people".to_string())
+    );
+    assert_eq!(
+        parse_plural_attr("(plural = people)"),
+        Some("people".to_string())
+    );
+}
+

@@ -85,6 +85,105 @@ fn parse_contract_mode_and_options(
     Ok(output)
 }
 
+pub(crate) fn get_plural_form(word: &str) -> String {
+    let lower = word.to_ascii_lowercase();
+    if lower.ends_with("person") {
+        return format!("{}people", &lower[..lower.len() - 6]);
+    }
+    if lower.ends_with("man") && !lower.ends_with("human") && !lower.ends_with("shaman") {
+        return format!("{}men", &lower[..lower.len() - 3]);
+    }
+    if lower.ends_with("child") {
+        return format!("{}children", &lower[..lower.len() - 5]);
+    }
+    if lower == "datum" {
+        return "data".to_string();
+    }
+    if lower == "quiz" {
+        return "quizzes".to_string();
+    }
+    if lower.ends_with('s')
+        || lower.ends_with('x')
+        || lower.ends_with('z')
+        || lower.ends_with("ch")
+        || lower.ends_with("sh")
+    {
+        return format!("{}es", lower);
+    }
+    if lower.ends_with('y') && lower.len() > 1 {
+        let second_last = lower.chars().nth(lower.len() - 2).unwrap();
+        if !matches!(second_last, 'a' | 'e' | 'i' | 'o' | 'u') {
+            return format!("{}ies", &lower[..lower.len() - 1]);
+        }
+    }
+    format!("{}s", lower)
+}
+
+pub(crate) fn parse_relation_attr(tokens_str: &str) -> (String, Option<String>) {
+    let s = tokens_str
+        .trim()
+        .trim_start_matches('(')
+        .trim_end_matches(')')
+        .trim();
+    if s.is_empty() {
+        return ("".to_string(), None);
+    }
+    let parts: Vec<&str> = s.split(',').map(|p| p.trim()).collect();
+    let table = parts[0].trim_matches('"').trim_matches('\'').trim().to_string();
+    if parts.len() > 1 {
+        let second = parts[1].trim();
+        if second.starts_with("name") || second.starts_with("plural") || second.starts_with("by") {
+            if let Some((_, val)) = second.split_once('=') {
+                let val = val.trim().trim_matches('"').trim_matches('\'').trim();
+                return (table, Some(val.to_string()));
+            }
+        }
+        let val = second.trim_matches('"').trim_matches('\'').trim();
+        return (table, Some(val.to_string()));
+    }
+    (table, None)
+}
+
+pub(crate) fn parse_plural_attr(tokens_str: &str) -> Option<String> {
+    let s = tokens_str
+        .trim()
+        .trim_start_matches('(')
+        .trim_end_matches(')')
+        .trim_start_matches('=')
+        .trim();
+    if s.is_empty() {
+        return None;
+    }
+    if s.contains("plural") {
+        if let Some((_, val)) = s.split_once('=') {
+            let val = val.trim().trim_matches('"').trim_matches('\'').trim();
+            if !val.is_empty() {
+                return Some(val.to_string());
+            }
+        }
+    }
+    let val = s.trim_matches('"').trim_matches('\'').trim();
+    if !val.is_empty() {
+        Some(val.to_string())
+    } else {
+        None
+    }
+}
+
+/// helps you set plural form or metadata for a table
+#[proc_macro_attribute]
+pub fn plural(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    item
+}
+
+/// helps you get the plural form of a table name
+#[proc_macro]
+pub fn table_plural(item: TokenStream) -> TokenStream {
+    let s = item.to_string().replace("\"", "").replace(" ", "");
+    let plural_name = get_plural_form(&s);
+    format!("\"{}\"", plural_name).parse().unwrap()
+}
+
 fn get_function_signature(function_prototype: &str) -> [u8; 4] {
     let mut sig = [0; 4];
     let mut hasher = Keccak::v256();
@@ -1189,39 +1288,41 @@ pub fn derive_value(item: TokenStream) -> TokenStream {
 /// let person: Person = post.person()?;
 /// let home: Option<Location> = person.location()?;
 /// ```
+///
+/// You can also set a plural form for a table name with `#[plural(people)]`, `#[plural = "people"]`,
+/// or `#[table(plural = "people")]`, and establish one-to-many relationships with `#[has_many(Post)]`.
 #[cfg(feature = "rdb")]
-#[proc_macro_derive(Table, attributes(belongs_to, belongs_none_or))]
+#[proc_macro_derive(
+    Table,
+    attributes(belongs_to, belongs_none_or, has_many, plural, table_name, table)
+)]
 pub fn derive_table(item: TokenStream) -> TokenStream {
     let input = syn::parse_macro_input!(item as syn::DeriveInput);
     let attrs = &input.attrs;
-    let mut belongs_to: Option<String> = None;
-    let mut belongs_none_or: Option<String> = None;
+    let mut belongs_to_list: Vec<(String, Option<String>)> = Vec::new();
+    let mut belongs_none_or_list: Vec<(String, Option<String>)> = Vec::new();
+    let mut has_many_list: Vec<(String, Option<String>)> = Vec::new();
+    let mut custom_plural: Option<String> = None;
+
     for a in attrs.iter() {
         let syn::Attribute { path, tokens, .. } = a;
         let attr_name = path.segments.first().map(|s| s.ident.to_string());
         if Some("belongs_to".to_string()) == attr_name {
-            belongs_to = Some(
-                tokens
-                    .to_string()
-                    .strip_prefix('(')
-                    .expect("#[belongs_to(table_name)] is not correct")
-                    .strip_suffix(')')
-                    .expect("#[belongs_to(table_name)] is not correct")
-                    .to_string(),
-            );
-        }
-        if Some("belongs_none_or".to_string()) == attr_name {
-            belongs_none_or = Some(
-                tokens
-                    .to_string()
-                    .strip_prefix('(')
-                    .expect("#[belongs_none_or(table_name)] is not correct")
-                    .strip_suffix(')')
-                    .expect("#[belongs_none_or(table_name)] is not correct")
-                    .to_string(),
-            );
+            belongs_to_list.push(parse_relation_attr(&tokens.to_string()));
+        } else if Some("belongs_none_or".to_string()) == attr_name {
+            belongs_none_or_list.push(parse_relation_attr(&tokens.to_string()));
+        } else if Some("has_many".to_string()) == attr_name {
+            has_many_list.push(parse_relation_attr(&tokens.to_string()));
+        } else if Some("plural".to_string()) == attr_name
+            || Some("table_name".to_string()) == attr_name
+            || Some("table".to_string()) == attr_name
+        {
+            if let Some(p) = parse_plural_attr(&tokens.to_string()) {
+                custom_plural = Some(p);
+            }
         }
     }
+
     let struct_name = &input.ident;
     let fields_with_type = match &input.data {
         syn::Data::Struct(syn::DataStruct {
@@ -1509,17 +1610,39 @@ pub fn derive_table(item: TokenStream) -> TokenStream {
         }
     ).to_string();
 
-    if let Some(parent_table) = belongs_to {
+    let plural_str = if let Some(p) = custom_plural {
+        p
+    } else {
+        get_plural_form(&struct_name.to_string())
+    };
+    let plural_lower_name = Ident::new(&plural_str.to_ascii_lowercase(), Span::call_site());
+    let plural_captal_name = Ident::new(&plural_str.to_ascii_uppercase(), Span::call_site());
+
+    if plural_lower_name != lower_name {
+        output += &quote! {
+            #[cfg(target_arch = "wasm32")]
+            pub use #lower_name as #plural_lower_name;
+
+            #[cfg(not(target_arch = "wasm32"))]
+            pub use #lower_name as #plural_lower_name;
+
+            pub use #captal_name as #plural_captal_name;
+        }
+        .to_string();
+    }
+
+    for (parent_table, custom_method) in belongs_to_list.iter() {
         let lower_parent_table = &format!("{}", &parent_table).to_ascii_lowercase();
-        let parent_table = Ident::new(&parent_table, Span::call_site());
-        let lower_parent_table_ident = Ident::new(&lower_parent_table, Span::call_site());
+        let parent_table_ident = Ident::new(&parent_table, Span::call_site());
+        let method_name = custom_method.as_deref().unwrap_or(lower_parent_table);
+        let method_ident = Ident::new(method_name, Span::call_site());
         let field_name = &format!("{}_id", lower_parent_table);
 
         output += &quote! {
             impl #struct_name {
-                pub fn #lower_parent_table_ident (&self) -> sewup::Result<#parent_table> {
+                pub fn #method_ident (&self) -> sewup::Result<#parent_table_ident> {
                     let id: usize = sewup::utils::get_field_by_name(self, #field_name);
-                    let parent_table = sewup::rdb::Db::load(None)?.table::<#parent_table>()?;
+                    let parent_table = sewup::rdb::Db::load(None)?.table::<#parent_table_ident>()?;
                     parent_table.get_record(id)
                 }
             }
@@ -1527,17 +1650,18 @@ pub fn derive_table(item: TokenStream) -> TokenStream {
         .to_string();
     }
 
-    if let Some(parent_table) = belongs_none_or {
+    for (parent_table, custom_method) in belongs_none_or_list.iter() {
         let lower_parent_table = &format!("{}", &parent_table).to_ascii_lowercase();
-        let parent_table = Ident::new(&parent_table, Span::call_site());
-        let lower_parent_table_ident = Ident::new(&lower_parent_table, Span::call_site());
+        let parent_table_ident = Ident::new(&parent_table, Span::call_site());
+        let method_name = custom_method.as_deref().unwrap_or(lower_parent_table);
+        let method_ident = Ident::new(method_name, Span::call_site());
         let field_name = &format!("{}_id", lower_parent_table);
 
         output += &quote! {
             impl #struct_name {
-                pub fn #lower_parent_table_ident (&self) -> sewup::Result<Option<#parent_table>> {
+                pub fn #method_ident (&self) -> sewup::Result<Option<#parent_table_ident>> {
                     let id: Option<usize> = sewup::utils::get_field_by_name(self, #field_name);
-                    let parent_table = sewup::rdb::Db::load(None)?.table::<#parent_table>()?;
+                    let parent_table = sewup::rdb::Db::load(None)?.table::<#parent_table_ident>()?;
                     if let Some(id) = id {
                         match parent_table.get_record(id) {
                             Ok(r) => Ok(Some(r)),
@@ -1552,7 +1676,31 @@ pub fn derive_table(item: TokenStream) -> TokenStream {
         .to_string();
     }
 
+    for (child_table, custom_method) in has_many_list.iter() {
+        let child_table_ident = Ident::new(&child_table, Span::call_site());
+        let default_plural = get_plural_form(&child_table);
+        let method_name = custom_method.as_deref().unwrap_or(&default_plural);
+        let method_ident = Ident::new(method_name, Span::call_site());
+        let field_name = format!("{}_id", struct_name.to_string().to_ascii_lowercase());
+
+        output += &quote! {
+            impl #struct_name {
+                pub fn #method_ident (&self) -> sewup::Result<Vec<#child_table_ident>> {
+                    let child_table = sewup::rdb::Db::load(None)?.table::<#child_table_ident>()?;
+                    let self_id: usize = sewup::utils::get_field_by_name(self, "id");
+                    let records = child_table.filter_records(&|r: &#child_table_ident| {
+                        let fk: usize = sewup::utils::get_field_by_name(r, #field_name);
+                        fk == self_id
+                    })?;
+                    Ok(records.into_iter().map(|(_, r)| r).collect())
+                }
+            }
+        }
+        .to_string();
+    }
+
     output.parse().unwrap()
+
 }
 
 /// helps you setup the test mododule, and test cases in contract.

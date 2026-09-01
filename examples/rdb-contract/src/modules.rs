@@ -8,6 +8,8 @@ use sewup_derive::{SizedString, Table};
 // please check out the test case in the end of this document
 #[derive(Table, Default, Clone, PartialEq, Serialize, Deserialize)]
 #[belongs_none_or(Location)]
+#[plural(people)]
+#[has_many(Post)]
 pub struct Person {
     pub trusted: bool,
     pub age: u8,

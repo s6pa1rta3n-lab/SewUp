@@ -17,8 +17,9 @@ pub use super::erc20::{
 
 #[cfg(target_arch = "wasm32")]
 use super::helpers::{
-    copy_into_address, copy_into_storage_value, get_approval, get_balance, get_token_approval,
-    get_token_owner, set_approval, set_balance, set_token_approval, set_token_owner,
+    copy_into_address, copy_into_storage_value, get_approval, get_balance, get_owner_token_by_index,
+    get_token_approval, get_token_owner, set_approval, set_balance, set_owner_token_by_index,
+    set_token_approval, set_token_owner,
 };
 
 #[cfg(target_arch = "wasm32")]
@@ -248,6 +249,34 @@ pub fn safe_transfer_from(_contract: &Contract) {
     // https://github.com/second-state/SewUp/issues/160
 }
 
+/// Implement ERC-721 Enumerable tokenOfOwnerByIndex(address,uint256)
+#[ewasm_lib_fn("2f745c59",
+    constant=true,
+    inputs=[
+        { "name": "_owner", "type": "address" },
+        { "name": "_index", "type": "uint256" }
+    ],
+    outputs=[{ "name": "_tokenId", "type": "uint256" }]
+)]
+pub fn token_of_owner_by_index(contract: &Contract) {
+    let owner = copy_into_address(&contract.input_data[16..36]);
+    let index: [u8; 32] = contract.input_data[36..68]
+        .try_into()
+        .expect("index should be byte32");
+
+    if owner == Address::default() {
+        ewasm_api::revert();
+    }
+
+    let balance = get_balance(&owner);
+    if index >= balance.bytes {
+        ewasm_api::revert();
+    }
+
+    let token_id = get_owner_token_by_index(&owner, &index);
+    ewasm_api::finish_data(&token_id.to_vec());
+}
+
 #[cfg(target_arch = "wasm32")]
 pub fn mint(addr: &str, tokens: Vec<&str>) {
     let address = Address::from_str(addr).expect("address invalid");
@@ -257,12 +286,14 @@ pub fn mint(addr: &str, tokens: Vec<&str>) {
             .unwrap()
             .try_into()
             .unwrap();
-    for token in tokens.iter() {
+    for (i, token) in tokens.iter().enumerate() {
         let token_id: [u8; 32] = decode(token)
             .expect("token id should be hex format")
             .try_into()
             .expect("token id should be byte32");
         set_token_owner(&token_id, &address);
+        let idx_bytes = Raw::from(i as u32).to_bytes32();
+        set_owner_token_by_index(&address, &idx_bytes, &token_id);
         log4(
             &Vec::<u8>::with_capacity(0),
             &topic.into(),

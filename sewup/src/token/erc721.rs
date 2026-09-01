@@ -18,11 +18,12 @@ pub use super::erc20::{
 #[cfg(target_arch = "wasm32")]
 use super::helpers::{
     copy_into_address, copy_into_storage_value, get_approval, get_balance, get_token_approval,
-    get_token_owner, set_approval, set_balance, set_token_approval, set_token_owner,
+    get_token_metadata, get_token_owner, set_approval, set_balance, set_token_approval,
+    set_token_metadata, set_token_owner,
 };
 
 #[cfg(target_arch = "wasm32")]
-use crate::utils::{caller, ewasm_return_bool};
+use crate::utils::{caller, ewasm_return_bool, ewasm_return_str};
 
 #[cfg(target_arch = "wasm32")]
 use bitcoin::util::uint::Uint256;
@@ -215,9 +216,18 @@ pub fn is_approved_for_all(contract: &Contract) {
     inputs=[ { "name": "_tokenId", "type": "uint256" } ],
     outputs=[ { "name": "_infoUrl", "type": "string" } ]
 )]
-pub fn token_metadata(_contract: &Contract) {
-    // TODO
-    // https://github.com/second-state/SewUp/issues/161
+pub fn token_metadata(contract: &Contract) {
+    let token_id: [u8; 32] = contract.input_data[4..36]
+        .try_into()
+        .expect("token id should be byte32");
+
+    let owner = get_token_owner(&token_id);
+    if owner == Address::default() {
+        ewasm_api::revert();
+    }
+
+    let url = get_token_metadata(&token_id);
+    ewasm_return_str(&url);
 }
 
 /// Implement ERC-721 safeTransferFrom(address,address,uint256,bytes)
@@ -263,6 +273,34 @@ pub fn mint(addr: &str, tokens: Vec<&str>) {
             .try_into()
             .expect("token id should be byte32");
         set_token_owner(&token_id, &address);
+        log4(
+            &Vec::<u8>::with_capacity(0),
+            &topic.into(),
+            &Raw::from(0u32).to_bytes32().into(),
+            &Raw::from(&address).to_bytes32().into(),
+            &token_id.into(),
+        );
+    }
+
+    set_balance(&address, &Raw::from(tokens.len()).to_bytes32().into());
+}
+
+#[cfg(target_arch = "wasm32")]
+pub fn mint_with_metadata(addr: &str, tokens: Vec<(&str, &str)>) {
+    let address = Address::from_str(addr).expect("address invalid");
+
+    let topic: [u8; 32] =
+        decode("ddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef")
+            .unwrap()
+            .try_into()
+            .unwrap();
+    for (token, metadata) in tokens.iter() {
+        let token_id: [u8; 32] = decode(token)
+            .expect("token id should be hex format")
+            .try_into()
+            .expect("token id should be byte32");
+        set_token_owner(&token_id, &address);
+        set_token_metadata(&token_id, metadata);
         log4(
             &Vec::<u8>::with_capacity(0),
             &topic.into(),

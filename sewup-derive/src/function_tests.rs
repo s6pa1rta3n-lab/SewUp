@@ -7,6 +7,8 @@ fn test_function_signature() {
     assert_eq!(get_function_signature("sendMessage(string,address)"), sig);
     sig = hex!("70a08231");
     assert_eq!(get_function_signature("balanceOf(address)"), sig);
+    sig = hex!("6914db60");
+    assert_eq!(get_function_signature("tokenMetadata(uint256)"), sig);
 }
 
 #[test]

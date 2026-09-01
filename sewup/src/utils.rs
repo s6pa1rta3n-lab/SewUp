@@ -53,7 +53,9 @@ pub fn ewasm_return(bytes: Vec<u8>) {
 pub fn ewasm_return_str(s: &str) {
     let mut output = Raw::from(32u32).as_bytes().to_vec();
     output.append(&mut Raw::from(s.len()).as_bytes().to_vec());
-    output.append(&mut Raw::from(s).as_bytes().to_vec());
+    for chunk in s.as_bytes().chunks(32) {
+        output.append(&mut Raw::from(chunk).as_bytes().to_vec());
+    }
     finish_data(&output);
 }
 

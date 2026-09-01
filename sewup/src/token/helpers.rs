@@ -44,6 +44,12 @@ pub fn calculate_token_hash(token_id: &[u8; 32]) -> Vec<u8> {
     sha3_256(&token).to_vec()
 }
 
+pub fn calculate_token_metadata_hash(token_id: &[u8; 32]) -> Vec<u8> {
+    let mut token_metadata: Vec<u8> = "token metadata".as_bytes().into();
+    token_metadata.extend_from_slice(token_id);
+    sha3_256(&token_metadata).to_vec()
+}
+
 pub fn calculate_token_balance_hash(address: &[u8; 20], token_id: &[u8; 32]) -> Vec<u8> {
     let mut balance_of: Vec<u8> = "balanceOf".as_bytes().into();
     balance_of.extend_from_slice(address);
@@ -218,4 +224,51 @@ pub fn get_token_owner(token_id: &[u8; 32]) -> Address {
         .try_into()
         .expect("address should be bytes20");
     bytes20.into()
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub fn set_token_metadata(_token_id: &[u8; 32], _metadata: &str) {}
+#[cfg(target_arch = "wasm32")]
+pub fn set_token_metadata(token_id: &[u8; 32], metadata: &str) {
+    let hash = calculate_token_metadata_hash(token_id);
+    let base_key = copy_into_storage_value(&hash);
+    let bytes = metadata.as_bytes();
+    let len = bytes.len();
+    let len_raw = Raw::from(len);
+    ewasm_api::storage_store(&base_key, &len_raw.to_bytes32().into());
+
+    for (i, chunk) in bytes.chunks(32).enumerate() {
+        let mut chunk_hash_input: Vec<u8> = hash.clone();
+        chunk_hash_input.extend_from_slice(&(i as u32).to_be_bytes());
+        let chunk_key = copy_into_storage_value(&sha3_256(&chunk_hash_input));
+        let chunk_raw = Raw::from(chunk);
+        ewasm_api::storage_store(&chunk_key, &chunk_raw.to_bytes32().into());
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub fn get_token_metadata(_token_id: &[u8; 32]) -> String {
+    String::new()
+}
+#[cfg(target_arch = "wasm32")]
+pub fn get_token_metadata(token_id: &[u8; 32]) -> String {
+    let hash = calculate_token_metadata_hash(token_id);
+    let base_key = copy_into_storage_value(&hash);
+    let len_raw = Raw::from(ewasm_api::storage_load(&base_key).bytes);
+    let len: usize = len_raw.into();
+    if len == 0 {
+        return String::new();
+    }
+    let mut data = Vec::with_capacity(len);
+    let num_chunks = (len + 31) / 32;
+    for i in 0..num_chunks {
+        let mut chunk_hash_input: Vec<u8> = hash.clone();
+        chunk_hash_input.extend_from_slice(&(i as u32).to_be_bytes());
+        let chunk_key = copy_into_storage_value(&sha3_256(&chunk_hash_input));
+        let chunk_val = ewasm_api::storage_load(&chunk_key);
+        let remaining = len - data.len();
+        let take = std::cmp::min(remaining, 32);
+        data.extend_from_slice(&chunk_val.bytes[..take]);
+    }
+    String::from_utf8(data).unwrap_or_default()
 }

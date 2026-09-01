@@ -28,6 +28,9 @@ fn main() -> anyhow::Result<()> {
         sewup::token::erc721::IS_APPROVED_FOR_ALL_SIG => {
             sewup::token::erc721::is_approved_for_all(&contract)
         }
+        sewup::token::erc721::TOKEN_METADATA_SIG => {
+            sewup::token::erc721::token_metadata(&contract)
+        }
         _ => (),
     };
     Ok(())

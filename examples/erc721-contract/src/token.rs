@@ -28,6 +28,12 @@ fn main() -> anyhow::Result<()> {
         sewup::token::erc721::IS_APPROVED_FOR_ALL_SIG => {
             sewup::token::erc721::is_approved_for_all(&contract)
         }
+        sewup::token::erc721::TOKEN_BY_INDEX_SIG => {
+            sewup::token::erc721::token_by_index(&contract)
+        }
+        sewup::token::erc721::TOKEN_OF_OWNER_BY_INDEX_SIG => {
+            sewup::token::erc721::token_of_owner_by_index(&contract)
+        }
         _ => (),
     };
     Ok(())
@@ -37,7 +43,10 @@ fn main() -> anyhow::Result<()> {
 mod tests {
     use super::*;
     use hex_literal::hex;
-    use sewup::erc721::{BALANCE_OF_SIG, OWNER_OF_SIG, TRANSFER_SIG};
+    use sewup::erc721::{
+        BALANCE_OF_SIG, OWNER_OF_SIG, TOKEN_BY_INDEX_SIG, TOKEN_OF_OWNER_BY_INDEX_SIG,
+        TRANSFER_SIG,
+    };
     use sewup_derive::ewasm_assert_eq;
 
     #[ewasm_test]
@@ -55,7 +64,31 @@ mod tests {
 
         let token1 = hex!("0000000000000000000000000000000000000000000000000000000000000001");
         let token2 = hex!("0000000000000000000000000000000000000000000000000000000000000002");
+        let token3 = hex!("0000000000000000000000000000000000000000000000000000000000000003");
         let token4 = hex!("0000000000000000000000000000000000000000000000000000000000000004");
+
+        let index0 = hex!("0000000000000000000000000000000000000000000000000000000000000000");
+        let index1 = hex!("0000000000000000000000000000000000000000000000000000000000000001");
+        let index2 = hex!("0000000000000000000000000000000000000000000000000000000000000002");
+
+        ewasm_assert_eq!(token_by_index(index0), token1.to_vec());
+        ewasm_assert_eq!(token_by_index(index1), token2.to_vec());
+        ewasm_assert_eq!(token_by_index(index2), token3.to_vec());
+
+        let mut owner_index0 = vec![0u8, 0u8, 0u8, 0u8];
+        owner_index0.extend_from_slice(&address_input);
+        owner_index0.extend_from_slice(&index0);
+        ewasm_assert_eq!(token_of_owner_by_index(owner_index0), token1.to_vec());
+
+        let mut owner_index1 = vec![0u8, 0u8, 0u8, 0u8];
+        owner_index1.extend_from_slice(&address_input);
+        owner_index1.extend_from_slice(&index1);
+        ewasm_assert_eq!(token_of_owner_by_index(owner_index1), token2.to_vec());
+
+        let mut owner_index2 = vec![0u8, 0u8, 0u8, 0u8];
+        owner_index2.extend_from_slice(&address_input);
+        owner_index2.extend_from_slice(&index2);
+        ewasm_assert_eq!(token_of_owner_by_index(owner_index2), token3.to_vec());
 
         ewasm_assert_eq!(
             owner_of(token1),

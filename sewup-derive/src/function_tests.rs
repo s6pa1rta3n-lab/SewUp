@@ -7,6 +7,13 @@ fn test_function_signature() {
     assert_eq!(get_function_signature("sendMessage(string,address)"), sig);
     sig = hex!("70a08231");
     assert_eq!(get_function_signature("balanceOf(address)"), sig);
+    sig = hex!("4f6ccce7");
+    assert_eq!(get_function_signature("tokenByIndex(uint256)"), sig);
+    sig = hex!("2f745c59");
+    assert_eq!(
+        get_function_signature("tokenOfOwnerByIndex(address,uint256)"),
+        sig
+    );
 }
 
 #[test]

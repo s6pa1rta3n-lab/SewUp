@@ -219,3 +219,93 @@ pub fn get_token_owner(token_id: &[u8; 32]) -> Address {
         .expect("address should be bytes20");
     bytes20.into()
 }
+
+pub fn calculate_total_supply_hash() -> Vec<u8> {
+    sha3_256("totalSupply".as_bytes()).to_vec()
+}
+
+pub fn calculate_token_by_index_hash(index: &[u8; 32]) -> Vec<u8> {
+    let mut key: Vec<u8> = "tokenByIndex".as_bytes().into();
+    key.extend_from_slice(index);
+    sha3_256(&key).to_vec()
+}
+
+pub fn calculate_owner_token_index_hash(address: &[u8; 20], index: &[u8; 32]) -> Vec<u8> {
+    let mut key: Vec<u8> = "ownerTokenIndex".as_bytes().into();
+    key.extend_from_slice(address);
+    key.extend_from_slice(index);
+    sha3_256(&key).to_vec()
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub fn get_total_supply() -> [u8; 32] {
+    [0u8; 32]
+}
+#[cfg(target_arch = "wasm32")]
+pub fn get_total_supply() -> [u8; 32] {
+    let hash = calculate_total_supply_hash();
+    let mut storage_key = StorageKey::default();
+    storage_key.bytes.copy_from_slice(&hash[0..32]);
+    ewasm_api::storage_load(&storage_key).bytes
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub fn set_total_supply(_supply: &[u8; 32]) {}
+#[cfg(target_arch = "wasm32")]
+pub fn set_total_supply(supply: &[u8; 32]) {
+    let hash = calculate_total_supply_hash();
+    let mut storage_key = StorageKey::default();
+    storage_key.bytes.copy_from_slice(&hash[0..32]);
+    let mut storage_value = StorageKey::default();
+    storage_value.bytes.copy_from_slice(supply);
+    ewasm_api::storage_store(&storage_key, &storage_value);
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub fn get_token_by_index(_index: &[u8; 32]) -> [u8; 32] {
+    [0u8; 32]
+}
+#[cfg(target_arch = "wasm32")]
+pub fn get_token_by_index(index: &[u8; 32]) -> [u8; 32] {
+    let hash = calculate_token_by_index_hash(index);
+    let mut storage_key = StorageKey::default();
+    storage_key.bytes.copy_from_slice(&hash[0..32]);
+    ewasm_api::storage_load(&storage_key).bytes
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub fn set_token_by_index(_index: &[u8; 32], _token_id: &[u8; 32]) {}
+#[cfg(target_arch = "wasm32")]
+pub fn set_token_by_index(index: &[u8; 32], token_id: &[u8; 32]) {
+    let hash = calculate_token_by_index_hash(index);
+    let mut storage_key = StorageKey::default();
+    storage_key.bytes.copy_from_slice(&hash[0..32]);
+    let mut storage_value = StorageKey::default();
+    storage_value.bytes.copy_from_slice(token_id);
+    ewasm_api::storage_store(&storage_key, &storage_value);
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub fn get_owner_token_by_index(_address: &Address, _index: &[u8; 32]) -> [u8; 32] {
+    [0u8; 32]
+}
+#[cfg(target_arch = "wasm32")]
+pub fn get_owner_token_by_index(address: &Address, index: &[u8; 32]) -> [u8; 32] {
+    let hash = calculate_owner_token_index_hash(&address.inner.bytes, index);
+    let mut storage_key = StorageKey::default();
+    storage_key.bytes.copy_from_slice(&hash[0..32]);
+    ewasm_api::storage_load(&storage_key).bytes
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub fn set_owner_token_by_index(_address: &Address, _index: &[u8; 32], _token_id: &[u8; 32]) {}
+#[cfg(target_arch = "wasm32")]
+pub fn set_owner_token_by_index(address: &Address, index: &[u8; 32], token_id: &[u8; 32]) {
+    let hash = calculate_owner_token_index_hash(&address.inner.bytes, index);
+    let mut storage_key = StorageKey::default();
+    storage_key.bytes.copy_from_slice(&hash[0..32]);
+    let mut storage_value = StorageKey::default();
+    storage_value.bytes.copy_from_slice(token_id);
+    ewasm_api::storage_store(&storage_key, &storage_value);
+}
+

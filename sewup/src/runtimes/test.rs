@@ -7,8 +7,10 @@ use std::fs::{self, OpenOptions};
 use std::io::prelude::*;
 
 use anyhow::Result;
-use evmc_sys::{evmc_call_kind, evmc_revision, evmc_status_code, evmc_storage_status};
 use hex::encode;
+use rust_ssvm::types::ffi::{
+    evmc_call_kind, evmc_revision, evmc_status_code, evmc_storage_status,
+};
 use rust_ssvm::{create as create_vm, host::HostContext, EvmcVm};
 
 pub struct TestRuntime {

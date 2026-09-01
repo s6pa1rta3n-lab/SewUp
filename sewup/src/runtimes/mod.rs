@@ -7,3 +7,5 @@ pub mod traits;
 
 #[allow(dead_code)]
 pub mod handler;
+
+pub use rust_ssvm::types::ffi;

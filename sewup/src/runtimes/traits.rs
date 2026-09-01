@@ -7,7 +7,7 @@
 use std::collections::HashMap;
 
 use anyhow::Result;
-use evmc_sys::evmc_call_kind;
+use rust_ssvm::types::ffi::evmc_call_kind;
 use thiserror::Error;
 
 use crate::types::Raw;
